@@ -28,7 +28,12 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 
-from bcmp.metrics import NetworkMetrics, NodeClassMetrics, NodeMetrics
+from bcmp.metrics import (
+    NetworkMetrics,
+    NodeClassMetrics,
+    NodeMetrics,
+    NodePerformanceSummary,
+)
 from bcmp.network import BCMPNetwork
 
 
@@ -87,29 +92,6 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
 
     throughput_per_class: Dict[str, float] = {}
 
-    network.metrics = NetworkMetrics()
-
-    for node_idx, node_id in enumerate(node_ids):
-        node_metrics = NodeMetrics()
-
-        for class_idx, class_id in enumerate(class_ids):
-            mean_customers = float(final_L[node_idx, class_idx])
-            prev_state = list(final_state)
-            prev_state[class_idx] -= 1 if prev_state[class_idx] > 0 else 0
-            prev_L = state_metrics.get(tuple(prev_state), np.zeros_like(final_L))
-            R = _mean_response_time(
-                network.nodes[node_id], class_id, prev_L.sum(axis=1)[node_idx]
-            )
-            node_metrics.per_class[class_id] = NodeClassMetrics(
-                mean_customers=mean_customers,
-                mean_response_time=float(R),
-            )
-
-        network.metrics.per_node[node_id] = node_metrics
-        network.nodes[node_id].mean_customers_per_class = {
-            class_id: float(final_L[node_idx, class_idx]) for class_idx, class_id in enumerate(class_ids)
-        }
-
     for class_idx, class_id in enumerate(class_ids):
         population = populations[class_idx]
         if population <= 0:
@@ -132,7 +114,49 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
         denom = float(np.sum(visits[class_id] * R))
         throughput_per_class[class_id] = population / denom if denom > 0 else 0.0
 
+    network.metrics = NetworkMetrics()
+    network.metrics.visit_ratios = visits
+
+    for node_idx, node_id in enumerate(node_ids):
+        node_metrics = NodeMetrics()
+
+        for class_idx, class_id in enumerate(class_ids):
+            mean_customers = float(final_L[node_idx, class_idx])
+            prev_state = list(final_state)
+            prev_state[class_idx] -= 1 if prev_state[class_idx] > 0 else 0
+            prev_L = state_metrics.get(tuple(prev_state), np.zeros_like(final_L))
+            R = _mean_response_time(
+                network.nodes[node_id], class_id, prev_L.sum(axis=1)[node_idx]
+            )
+            service_rate = network.nodes[node_id].config.service_rates_per_class.get(class_id, 0.0)
+            service_time = 1.0 / service_rate if service_rate > 0 else 0.0
+            arrival_rate = throughput_per_class.get(class_id, 0.0) * visits[class_id][node_idx]
+            waiting_time = max(float(R) - service_time, 0.0)
+            queue_length = arrival_rate * waiting_time
+            servers = network.nodes[node_id].config.servers or 1
+            utilization = (
+                arrival_rate / (service_rate * servers)
+                if service_rate > 0 and servers > 0
+                else 0.0
+            )
+            node_metrics.per_class[class_id] = NodeClassMetrics(
+                mean_customers=mean_customers,
+                mean_response_time=float(R),
+                mean_waiting_time=waiting_time,
+                mean_queue_length=queue_length,
+                service_time=service_time,
+                arrival_rate=arrival_rate,
+                utilization=utilization,
+            )
+
+        network.metrics.per_node[node_id] = node_metrics
+        network.nodes[node_id].mean_customers_per_class = {
+            class_id: float(final_L[node_idx, class_idx]) for class_idx, class_id in enumerate(class_ids)
+        }
+
     network.metrics.throughput_per_class = throughput_per_class
+
+    _update_node_summaries(network, node_ids)
 
 
 def _generate_states_for_total(total: int, limits: Sequence[int]) -> Iterable[Tuple[int, ...]]:
@@ -199,3 +223,36 @@ def _mean_response_time(node, class_id: str, mean_customers_total: float) -> flo
         return service_time * (1.0 + mean_customers_total / servers)
 
     raise ValueError(f"Nieobsługiwany typ węzła: {node.config.node_type}")
+
+
+def _update_node_summaries(network: BCMPNetwork, node_ids: List[str]) -> None:
+    """Agreguje metryki per-klasa do wskaźników kolejki dla węzłów."""
+
+    for node_id in node_ids:
+        node = network.nodes[node_id]
+        metrics = network.metrics.per_node[node_id]
+
+        total_arrival = 0.0
+        total_waiting = 0.0
+        total_system = 0.0
+        total_queue_length = 0.0
+        total_system_length = metrics.total_mean_customers
+        total_utilization = 0.0
+
+        for class_metrics in metrics.per_class.values():
+            total_arrival += class_metrics.arrival_rate
+            total_waiting += class_metrics.arrival_rate * class_metrics.mean_waiting_time
+            total_system += class_metrics.arrival_rate * class_metrics.mean_response_time
+            total_queue_length += class_metrics.mean_queue_length
+            total_utilization += class_metrics.utilization
+
+        mean_waiting = total_waiting / total_arrival if total_arrival > 0 else 0.0
+        mean_system = total_system / total_arrival if total_arrival > 0 else 0.0
+
+        metrics.summary = NodePerformanceSummary(
+            mean_queue_length=total_queue_length,
+            mean_system_length=total_system_length,
+            mean_waiting_time=mean_waiting,
+            mean_system_time=mean_system,
+            utilization=total_utilization,
+        )

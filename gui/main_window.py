@@ -58,8 +58,8 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
 
         self.simulation_view = SimulationView(self.network, self.simulation)
-        self.network_view = NetworkView(self.network)
-        self.results_view = ResultsView(self.network)
+        self.network_view = NetworkView(self.network, self.controller)
+        self.results_view = ResultsView(self.network, self.simulation)
 
         tabs.addTab(self.simulation_view, "Symulacja")
         tabs.addTab(self.network_view, "Network")

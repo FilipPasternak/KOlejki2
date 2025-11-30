@@ -6,7 +6,15 @@ Np. tabele/listy węzłów i klas, prosty graficzny rysunek sieci, itp.
 from typing import Dict, List
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QLabel,
+    QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    QPushButton,
+)
 
 from bcmp.config_schema import RoutingEntry
 from bcmp.network import BCMPNetwork
@@ -16,9 +24,10 @@ from bcmp.routing import build_routing_matrix
 class NetworkView(QWidget):
     """Widok prezentujący aktualną konfigurację sieci."""
 
-    def __init__(self, network: BCMPNetwork) -> None:
+    def __init__(self, network: BCMPNetwork, controller=None) -> None:
         super().__init__()
         self.network = network
+        self.controller = controller
         self._loading = False
 
         self.node_ids: List[str] = [node.id for node in self.network.config.nodes]
@@ -33,6 +42,7 @@ class NetworkView(QWidget):
         self._init_classes_tab()
         self._init_nodes_tab()
         self._init_routing_tab()
+        self._init_load_tab()
 
         self.refresh()
 
@@ -72,6 +82,23 @@ class NetworkView(QWidget):
 
         self.tabs.addTab(container, "Nodes")
 
+    def _init_load_tab(self) -> None:
+        container = QWidget()
+        tab_layout = QVBoxLayout()
+        container.setLayout(tab_layout)
+
+        tab_layout.addWidget(QLabel("Docelowe wykorzystanie ρ – dopasowywanie stawek obsługi"))
+        self.rho_table = QTableWidget()
+        self.rho_table.setColumnCount(3)
+        self.rho_table.setHorizontalHeaderLabels(["Node", "Aktualne ρ", "Cel ρ"])
+        tab_layout.addWidget(self.rho_table)
+
+        self.apply_rho_button = QPushButton("Dostosuj stawki obsługi")
+        self.apply_rho_button.clicked.connect(self._apply_rho_targets)
+        tab_layout.addWidget(self.apply_rho_button)
+
+        self.tabs.addTab(container, "Utilization")
+
     def _init_routing_tab(self) -> None:
         self.routing_tab = QTabWidget()
         self.routing_tables: Dict[str, QTableWidget] = {}
@@ -97,6 +124,7 @@ class NetworkView(QWidget):
             self._refresh_nodes()
             self._refresh_service_rates()
             self._refresh_routing()
+            self._refresh_rho_targets()
         finally:
             self._loading = False
 
@@ -148,6 +176,27 @@ class NetworkView(QWidget):
                 self.service_rate_table.setItem(row, col, item)
 
         self.service_rate_table.resizeColumnsToContents()
+
+    def _refresh_rho_targets(self) -> None:
+        nodes = self.network.config.nodes
+        self.rho_table.setRowCount(len(nodes))
+
+        for row, node in enumerate(nodes):
+            current_rho = self.network.metrics.per_node.get(node.id)
+            summary = current_rho.summary if current_rho else None
+            rho_value = summary.utilization if summary else 0.0
+
+            item_node = QTableWidgetItem(node.id)
+            item_node.setFlags(item_node.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.rho_table.setItem(row, 0, item_node)
+            self.rho_table.setItem(row, 1, QTableWidgetItem(f"{rho_value:.4f}"))
+
+            target_item = self.rho_table.item(row, 2)
+            if target_item is None:
+                target_item = QTableWidgetItem("0.80")
+            self.rho_table.setItem(row, 2, target_item)
+
+        self.rho_table.resizeColumnsToContents()
 
     def _refresh_routing(self) -> None:
         nodes = self.node_ids
@@ -254,3 +303,23 @@ class NetworkView(QWidget):
 
         self.network.config.routing_per_class[class_id] = new_entries
         self.network.routing_matrices[class_id] = build_routing_matrix(new_entries)
+
+    def _apply_rho_targets(self) -> None:
+        if self.controller is None or self._loading:
+            return
+
+        targets: Dict[str, float] = {}
+        for row in range(self.rho_table.rowCount()):
+            node_item = self.rho_table.item(row, 0)
+            target_item = self.rho_table.item(row, 2)
+            if node_item is None or target_item is None:
+                continue
+            try:
+                target_value = float(target_item.text())
+            except ValueError:
+                continue
+            if target_value > 0:
+                targets[node_item.text()] = target_value
+
+        if targets:
+            self.controller.tune_service_rates_for_rho(targets)
