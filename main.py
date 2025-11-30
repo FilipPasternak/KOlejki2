@@ -21,6 +21,7 @@ W projekcie zakładamy:
 from bcmp.config_schema import ClassConfig, NetworkConfig, RoutingEntry, ServiceCenterConfig
 from bcmp.network import BCMPNetwork
 from bcmp import mva_sum
+from bcmp.simulation import TicketSimulation
 from gui.app import run_gui
 
 
@@ -224,7 +225,9 @@ def main() -> None:
     config = load_default_config()
     network = build_network(config)
     precompute_initial_metrics(network)
-    run_gui(network)
+
+    simulation = TicketSimulation(network)
+    run_gui(network, simulation)
 
 
 if __name__ == "__main__":
