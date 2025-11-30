@@ -22,16 +22,18 @@ from bcmp.network import BCMPNetwork
 from gui.controllers import NetworkController
 from gui.network_view import NetworkView
 from gui.results_view import ResultsView
+from gui.simulation_view import SimulationView
 
 
 class MainWindow(QMainWindow):
     """Główne okno aplikacji spinające widoki konfiguracji i wyników."""
 
-    def __init__(self, network: BCMPNetwork, controller: NetworkController) -> None:
+    def __init__(self, network: BCMPNetwork, controller: NetworkController, simulation) -> None:
         super().__init__()
 
         self.network = network
         self.controller = controller
+        self.simulation = simulation
 
         self.setWindowTitle("KOlejki2 – BCMP Network")
         self.resize(1000, 700)
@@ -55,9 +57,11 @@ class MainWindow(QMainWindow):
     def _setup_central_widget(self) -> None:
         tabs = QTabWidget()
 
+        self.simulation_view = SimulationView(self.network, self.simulation)
         self.network_view = NetworkView(self.network)
         self.results_view = ResultsView(self.network)
 
+        tabs.addTab(self.simulation_view, "Symulacja")
         tabs.addTab(self.network_view, "Network")
         tabs.addTab(self.results_view, "Results")
 

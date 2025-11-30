@@ -2,8 +2,9 @@
 
 Ten projekt prezentuje kompletny, uruchamialny prototyp aplikacji do analizy
 zamkniętych, wieloklasowych sieci kolejkowych typu BCMP z użyciem algorytmu Mean
-Value Analysis (metoda SUM). Warstwa logiczna jest napisana w Pythonie, a GUI
-oparto o PyQt6.
+Value Analysis (metoda SUM) **oraz** wbudowaną symulację przepływu zgłoszeń w
+czasie rzeczywistym. Warstwa logiczna jest napisana w Pythonie, a GUI oparto o
+PyQt6.
 
 ## Wprowadzenie teoretyczne
 
@@ -66,9 +67,20 @@ Wyniki (średnia liczba klientów, czasy odpowiedzi, throughput) zapisywane są 
 
 3. **Uruchom aplikację z domyślną konfiguracją sieci**
 
-   ```bash
-   python main.py
-   ```
+```bash
+python main.py
+```
+
+Po starcie otwiera się okno PyQt6 z trzema zakładkami:
+
+- **Symulacja** – najważniejszy widok prezentujący w czasie rzeczywistym
+  przepływ zgłoszeń pomiędzy węzłami (kolejki i liczba obsługiwanych zgłoszeń
+  per węzeł) wraz z dziennikiem zdarzeń. Możesz zatrzymać lub zresetować
+  symulację przyciskami na panelu sterującym.
+- **Network** – konfiguracja sieci (węzły, klasy, routing) z możliwością
+  edycji podstawowych parametrów.
+- **Results** – wyniki analizy metodą SUM/MVA (średnie liczby klientów,
+  czasy odpowiedzi i throughput).
 
 Po starcie otwiera się okno PyQt6 prezentujące konfigurację sieci (węzły,
 klasy, routing) oraz wyniki obliczeń. Zmiany parametrów w GUI można ponownie

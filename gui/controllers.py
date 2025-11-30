@@ -9,6 +9,7 @@ Tutaj można umieścić funkcje/kontrolery, które:
 
 from bcmp.network import BCMPNetwork
 from bcmp import mva_sum
+from bcmp.simulation import TicketSimulation
 
 
 class NetworkController:
@@ -22,8 +23,9 @@ class NetworkController:
         * do powiadamiania widoków o zmianie danych (np. przez callbacki lub sygnały).
     """
 
-    def __init__(self, network: BCMPNetwork) -> None:
+    def __init__(self, network: BCMPNetwork, simulation: TicketSimulation | None = None) -> None:
         self.network = network
+        self.simulation = simulation
         self._listeners = []
 
     def add_listener(self, callback) -> None:
@@ -45,3 +47,12 @@ class NetworkController:
         """
         mva_sum.compute_network_metrics(self.network)
         self._notify_listeners()
+
+    # --- Symulacja -----------------------------------------------------------
+    def toggle_simulation(self) -> None:
+        if self.simulation is not None:
+            self.simulation.toggle()
+
+    def reset_simulation(self) -> None:
+        if self.simulation is not None:
+            self.simulation.reset()

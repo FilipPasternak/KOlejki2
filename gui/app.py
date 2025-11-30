@@ -11,13 +11,13 @@ from gui.controllers import NetworkController
 from gui.main_window import MainWindow
 
 
-def run_gui(network: BCMPNetwork) -> None:
-    """Uruchamia GUI PyQt6 z przekazanym obiektem `BCMPNetwork`."""
+def run_gui(network: BCMPNetwork, simulation) -> None:
+    """Uruchamia GUI PyQt6 z przekazanym obiektem `BCMPNetwork` i symulacją."""
 
     app = QApplication([])
 
-    controller = NetworkController(network)
-    window = MainWindow(network, controller)
+    controller = NetworkController(network, simulation)
+    window = MainWindow(network, controller, simulation)
     window.show()
 
     app.exec()
