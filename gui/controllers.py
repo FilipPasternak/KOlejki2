@@ -24,6 +24,16 @@ class NetworkController:
 
     def __init__(self, network: BCMPNetwork) -> None:
         self.network = network
+        self._listeners = []
+
+    def add_listener(self, callback) -> None:
+        """Rejestruje funkcję wywoływaną po aktualizacji modelu."""
+
+        self._listeners.append(callback)
+
+    def _notify_listeners(self) -> None:
+        for callback in self._listeners:
+            callback()
 
     def recompute_metrics(self) -> None:
         """Przelicza metryki sieci i aktualizuje model.
@@ -34,4 +44,4 @@ class NetworkController:
         - Po przeliczeniu powiadomić widoki (np. przez mechanizm podpiętych callbacków).
         """
         mva_sum.compute_network_metrics(self.network)
-        # TODO: Codex – powiadomienie widoków o zmianie.
+        self._notify_listeners()
