@@ -50,6 +50,25 @@ Wyniki (średnia liczba klientów, czasy odpowiedzi, throughput) zapisywane są 
 - `bcmp/` – logika modelu sieci BCMP i obliczeń MVA (SUM).
 - `gui/` – warstwa interfejsu użytkownika.
 
+## Domyślna sieć kolejek (węzły i klasy)
+
+W projekcie zaszyto pięć węzłów kolejki oraz cztery klasy zgłoszeń (sieć
+zamknięta):
+
+- **INTAKE** – Rejestracja zgłoszenia, FCFS, 2 serwery (obsługuje wszystkie
+  klasy).
+- **PRE_DIAG** – Szybka diagnostyka, PS, 3 serwery.
+- **OPS** – Obsługa operacyjna, FCFS, 4 serwery.
+- **LAB** – Analizy/IS, typ IS (nielimitowana liczba serwerów w modelu),
+  przyjmuje zgłoszenia po diagnostyce/obsłudze.
+- **ESC** – Eskalacja krytyczna, LCFS-PR, 1 serwer, pętluje krytyczne
+  zgłoszenia VIP/MAINT.
+
+Klasy klientów: **VIP**, **STD**, **BATCH**, **MAINT** – każda z własną
+populacją (od 2 do 8 zgłoszeń) i macierzą routingu prowadzącą przez powyższe
+węzły. Routing i intensywności obsługi dla każdej klasy/węzła można edytować w
+zakładce *Network*.
+
 ## Uruchomienie aplikacji
 
 1. **Utwórz i aktywuj środowisko (opcjonalnie)**
@@ -75,12 +94,15 @@ Po starcie otwiera się okno PyQt6 z trzema zakładkami:
 
 - **Symulacja** – najważniejszy widok prezentujący w czasie rzeczywistym
   przepływ zgłoszeń pomiędzy węzłami (kolejki i liczba obsługiwanych zgłoszeń
-  per węzeł) wraz z dziennikiem zdarzeń. Możesz zatrzymać lub zresetować
-  symulację przyciskami na panelu sterującym.
+  per węzeł) wraz z dziennikiem zdarzeń **oraz żywym wykresem długości kolejek**
+  dla każdego węzła. Możesz zatrzymać lub zresetować symulację przyciskami na
+  panelu sterującym.
 - **Network** – konfiguracja sieci (węzły, klasy, routing) z możliwością
-  edycji podstawowych parametrów.
+  edycji podstawowych parametrów oraz dostrajania stawek obsługi do docelowego
+  wykorzystania serwerów (ρ) per węzeł.
 - **Results** – wyniki analizy metodą SUM/MVA (średnie liczby klientów,
-  czasy odpowiedzi i throughput).
+  czasy odpowiedzi i throughput) rozszerzone o metryki kolejki (Wq, W, Lq, L,
+  ρ) liczone analitycznie i empirycznie (z symulacji) dla porównania.
 
 Po starcie otwiera się okno PyQt6 prezentujące konfigurację sieci (węzły,
 klasy, routing) oraz wyniki obliczeń. Zmiany parametrów w GUI można ponownie
