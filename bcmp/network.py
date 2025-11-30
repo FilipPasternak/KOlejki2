@@ -60,5 +60,17 @@ class BCMPNetwork:
             * dla każdego `ClassConfig` w `config.classes` utworzyć `CustomerClass`,
             * dla każdej klasy zbudować macierz routingu (moduł `routing`).
         """
-        # TODO: Codex – inicjalizacja sieci na podstawie configu.
-        raise NotImplementedError
+        self.nodes = {
+            node_config.id: ServiceCenter(node_config)
+            for node_config in self.config.nodes
+        }
+
+        self.classes = {
+            class_config.id: CustomerClass(class_config)
+            for class_config in self.config.classes
+        }
+
+        self.routing_matrices = {
+            class_id: routing.build_routing_matrix(entries)
+            for class_id, entries in self.config.routing_per_class.items()
+        }
