@@ -14,20 +14,60 @@ Zadanie dla Codex:
     * odświeżała widoki po przeliczeniu metryk metodą SUM/MVA.
 """
 
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QMainWindow, QTabWidget
+
 from bcmp.network import BCMPNetwork
 
+from gui.controllers import NetworkController
+from gui.network_view import NetworkView
+from gui.results_view import ResultsView
 
-class MainWindow:
-    """Szkielet klasy głównego okna.
 
-    Zadanie dla Codex:
-    -------------------
-    - Zamienić tę klasę na klasę dziedziczącą z odpowiedniej klasy frameworka GUI
-      (np. `QMainWindow` w PyQt6).
-    - Skonfigurować layout, menu, akcje, podwidoki (docki, zakładki itp.).
-    - Zaimplementować mechanizmy aktualizacji widoków po zmianie modelu.
-    """
+class MainWindow(QMainWindow):
+    """Główne okno aplikacji spinające widoki konfiguracji i wyników."""
 
-    def __init__(self, network: BCMPNetwork) -> None:
+    def __init__(self, network: BCMPNetwork, controller: NetworkController) -> None:
+        super().__init__()
+
         self.network = network
-        # TODO: Codex – właściwa inicjalizacja komponentów GUI.
+        self.controller = controller
+
+        self.setWindowTitle("KOlejki2 – BCMP Network")
+        self.resize(1000, 700)
+
+        self._setup_actions()
+        self._setup_central_widget()
+
+        self.controller.add_listener(self.refresh_views)
+
+    def _setup_actions(self) -> None:
+        recompute_action = QAction("Recompute", self)
+        recompute_action.triggered.connect(self.recompute_metrics)
+
+        menubar = self.menuBar()
+        compute_menu = menubar.addMenu("Compute")
+        compute_menu.addAction(recompute_action)
+
+        toolbar = self.addToolBar("Actions")
+        toolbar.addAction(recompute_action)
+
+    def _setup_central_widget(self) -> None:
+        tabs = QTabWidget()
+
+        self.network_view = NetworkView(self.network)
+        self.results_view = ResultsView(self.network)
+
+        tabs.addTab(self.network_view, "Network")
+        tabs.addTab(self.results_view, "Results")
+
+        self.setCentralWidget(tabs)
+
+    def recompute_metrics(self) -> None:
+        """Wywołuje przeliczenie sieci i odświeża widoki."""
+
+        self.controller.recompute_metrics()
+
+    def refresh_views(self) -> None:
+        self.network_view.refresh()
+        self.results_view.refresh()
