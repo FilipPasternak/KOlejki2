@@ -52,8 +52,6 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
     state_metrics: Dict[Tuple[int, ...], np.ndarray] = {
         tuple(0 for _ in class_ids): np.zeros((len(node_ids), len(class_ids)))
     }
-    throughput_per_class: Dict[str, float] = {class_id: 0.0 for class_id in class_ids}
-
     for total_clients in range(1, total_population + 1):
         for state in _generate_states_for_total(total_clients, populations):
             L_state = np.zeros((len(node_ids), len(class_ids)))
@@ -78,7 +76,6 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
 
                 denom = float(np.sum(visits[class_id] * R))
                 X_k = state[class_idx] / denom if denom > 0 else 0.0
-                throughput_per_class[class_id] = X_k
 
                 for node_idx, node_id in enumerate(node_ids):
                     L_state[node_idx, class_idx] = X_k * visits[class_id][node_idx] * R[node_idx]
@@ -88,8 +85,9 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
     final_state = tuple(populations)
     final_L = state_metrics[final_state]
 
+    throughput_per_class: Dict[str, float] = {}
+
     network.metrics = NetworkMetrics()
-    network.metrics.throughput_per_class = throughput_per_class
 
     for node_idx, node_id in enumerate(node_ids):
         node_metrics = NodeMetrics()
@@ -111,6 +109,30 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
         network.nodes[node_id].mean_customers_per_class = {
             class_id: float(final_L[node_idx, class_idx]) for class_idx, class_id in enumerate(class_ids)
         }
+
+    for class_idx, class_id in enumerate(class_ids):
+        population = populations[class_idx]
+        if population <= 0:
+            throughput_per_class[class_id] = 0.0
+            continue
+
+        prev_state = list(final_state)
+        prev_state[class_idx] -= 1
+        prev_L = state_metrics.get(tuple(prev_state), np.zeros_like(final_L))
+
+        R = np.array(
+            [
+                _mean_response_time(
+                    network.nodes[node_id], class_id, prev_L.sum(axis=1)[node_idx]
+                )
+                for node_idx, node_id in enumerate(node_ids)
+            ]
+        )
+
+        denom = float(np.sum(visits[class_id] * R))
+        throughput_per_class[class_id] = population / denom if denom > 0 else 0.0
+
+    network.metrics.throughput_per_class = throughput_per_class
 
 
 def _generate_states_for_total(total: int, limits: Sequence[int]) -> Iterable[Tuple[int, ...]]:
