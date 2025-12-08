@@ -32,16 +32,6 @@ class BCMPNetwork:
         * obiekty `CustomerClass` dla każdej klasy.
     - Budować struktury routingu (np. słowniki macierzy przejść z modułu `routing`).
     - Przechowywać wyniki obliczeń MVA w obiekcie `NetworkMetrics`.
-
-    Zadanie dla Codex:
-    -------------------
-    - Uzupełnić inicjalizację tak, aby z `NetworkConfig` powstawały
-      wszystkie potrzebne obiekty.
-    - Dodać metody pomocnicze, np.:
-        * `get_node(node_id)` – pobranie węzła,
-        * `get_class(class_id)` – pobranie klasy,
-        * `update_metrics(metrics: NetworkMetrics)` – zapis nowych metryk,
-        * metody wspierające MVA (np. dostęp do routingów, parametrów obsługi).
     """
 
     config: NetworkConfig
@@ -52,13 +42,6 @@ class BCMPNetwork:
 
     def __post_init__(self) -> None:
         """Tworzy obiekty węzłów, klas i struktur routingu na podstawie konfiguracji.
-
-        Zadanie dla Codex:
-        -------------------
-        - Zaimplementować logikę:
-            * dla każdego `ServiceCenterConfig` w `config.nodes` utworzyć `ServiceCenter`,
-            * dla każdego `ClassConfig` w `config.classes` utworzyć `CustomerClass`,
-            * dla każdej klasy zbudować macierz routingu (moduł `routing`).
         """
         self.nodes = {
             node_config.id: ServiceCenter(node_config)

@@ -7,6 +7,4 @@ Założenia:
     * prostą edycję wybranych parametrów,
     * uruchomienie ponownego przeliczenia metryk,
     * podgląd wyników (wykresy/tabele).
-
-- Konkretny framework (np. PyQt6) ma zostać w pełni zaimplementowany przez Codex.
 """

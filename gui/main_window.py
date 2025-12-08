@@ -4,14 +4,6 @@ To okno ma spinać poszczególne widoki:
 - widok konfiguracji sieci (lista węzłów, klas, parametry),
 - widok wyników (tabele/wizualizacje metryk),
 - ewentualnie panel do modyfikacji parametrów i ponownego przeliczenia.
-
-Zadanie dla Codex:
--------------------
-- Zaimplementować klasę okna głównego w wybranym frameworku GUI (np. PyQt6).
-- Zadbać o to, aby:
-    * przechowywała odniesienie do `BCMPNetwork`,
-    * udostępniała przyciski/akcje „Przelicz ponownie”,
-    * odświeżała widoki po przeliczeniu metryk metodą SUM/MVA.
 """
 
 from PyQt6.QtGui import QAction

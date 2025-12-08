@@ -59,11 +59,6 @@ class NetworkMetrics:
     - `per_node`: metryki per węzeł.
     - `throughput_per_class`: throughput (X^(k)) dla każdej klasy.
     - Można dodać inne pola: średni czas odpowiedzi w systemie, itp.
-
-    Zadanie dla Codex:
-    -------------------
-    - Uzupełnić tę strukturę o wszystkie metryki, które będą potrzebne
-      w GUI i w sprawozdaniu.
     """
 
     per_node: Dict[str, NodeMetrics] = field(default_factory=dict)

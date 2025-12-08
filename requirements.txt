@@ -1,4 +1,4 @@
-# Framework GUI – docelowo Codex ma wybrać i zaimplementować (np. PyQt6 lub tkinter).
+# Framework GUI do implementacji (np. PyQt6 lub tkinter).
 # Poniżej propozycja z PyQt6.
 PyQt6
 PyQt6-Charts

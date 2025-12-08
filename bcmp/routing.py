@@ -12,14 +12,6 @@ def build_routing_matrix(
     routing_entries: List[RoutingEntry],
 ) -> Dict[str, Dict[str, float]]:
     """Buduje słownikową „macierz” przejść z listy `RoutingEntry`.
-
-    Zadanie dla Codex:
-    -------------------
-    - Zaimplementować tę funkcję tak, aby zwracała strukturę:
-        {from_node_id: {to_node_id: probability}}.
-    - Upewnić się, że węzły bez zdefiniowanych przejść też są reprezentowane
-      (np. pustym słownikiem).
-    - Ewentualnie dodać walidację sum prawdopodobieństw.
     """
     routing_matrix: Dict[str, Dict[str, float]] = {}
 

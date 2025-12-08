@@ -12,14 +12,6 @@ Docelowo:
 
 - Ewentualne funkcje pomocnicze do obsługi poszczególnych typów węzłów BCMP:
   (FCFS, PS, IS, LCFS_PR).
-
-Zadanie dla Codex:
--------------------
-- Zaimplementować kompletny algorytm MVA dla przygotowanego modelu sieci.
-- Zadbać o:
-    * czytelność i komentowanie kodu (to projekt na studia),
-    * walidację danych wejściowych,
-    * ewentualną możliwość późniejszej rozbudowy (np. inne typy węzłów).
 """
 
 from __future__ import annotations
