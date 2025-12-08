@@ -15,59 +15,101 @@ Sieci BCMP (Baskett–Chandy–Muntz–Palacios) pozwalają na analityczne oblic
 złożonych sieciach kolejek przy założeniu określonych dyscyplin obsługi. W tym
 projekcie przyjmujemy:
 
-- **Zamkniętą** sieć: liczba klientów każdej klasy jest stała, nie ma napływu z
-  zewnątrz.
-- **Brak zmiany klasy**: klient zawsze pozostaje w swojej klasie (np. VIP,
-  Standard itp.).
+- **Zamkniętą** sieć: liczba klientów każdej klasy jest stała.
+- **Brak zmiany klasy** – klient zawsze pozostaje w swojej klasie (VIP/STD/BATCH/MAINT).
 - **Obsługiwane typy węzłów**: FCFS (M/M/m), PS, IS, LCFS-PR.
-- **Routing zależny od klasy**: każda klasa ma własną macierz prawdopodobieństw
+- **Routing zależny od klasy** – każda klasa ma własną macierz prawdopodobieństw
   przejść między węzłami.
 
 ### Metoda SUM / Mean Value Analysis (MVA)
 
 Algorytm MVA iteracyjnie zwiększa populację klientów od zera do pełnej liczby,
-obliczając dla każdego stanu średnie czasy przebywania w węzłach oraz wynikający
-z nich throughput. Kluczowe elementy obliczeń w implementacji:
+obliczając dla każdego stanu średnie czasy przebywania, średnią liczbę klientów
+w węzłach oraz throughput. Kluczowe elementy:
 
-1. **Współczynniki wizyt (visit ratios)** – wyliczane z macierzy routingu
-   indywidualnie dla każdej klasy.
-2. **Iteracje po stanach** – dla kolejnych wartości łącznej populacji
-   obliczany jest średni czas przebywania w każdym węźle i średnia liczba
-   klientów per węzeł i klasa.
-3. **Czasy przebywania w węźle** – dla FCFS/PS/LCFS-PR użyto wzoru
-   \(R_i = S_i (1 + L_i / m)\), dla IS przyjęto \(R_i = S_i\), gdzie
-   \(S_i\) to średni czas obsługi, a \(m\) liczba serwerów.
-4. **Throughput klas** – na końcu iteracji wyznaczany z równania
-   \(X^{(k)} = N^{(k)} / \sum_i V_i^{(k)} R_i^{(k)}\), gdzie \(N^{(k)}\)
-   to populacja klasy.
+1. **Współczynniki wizyt (visit ratios)** – wyliczone z macierzy routingu dla każdej klasy.
+2. **Iteracje po stanach** – od pustej sieci aż do pełnej populacji.
+3. **Czasy przebywania** – dla FCFS/PS/LCFS-PR stosujemy
+   \(R_i = S_i (1 + L_i / m)\); dla IS \(R_i = S_i\).
+4. **Throughput** – \(X^{(k)} = N^{(k)} / \sum_i V_i^{(k)} R_i^{(k)}\).
 
-Wyniki (średnia liczba klientów, czasy odpowiedzi, throughput) zapisywane są w
-`network.metrics` i prezentowane w GUI.
+Wyniki są przechowywane w `network.metrics` oraz wyświetlane w GUI.
 
 ## Struktura katalogów
 
-- `main.py` – punkt startowy aplikacji, spina konfigurację, logikę BCMP i GUI.
-- `bcmp/` – logika modelu sieci BCMP i obliczeń MVA (SUM).
-- `gui/` – warstwa interfejsu użytkownika.
+- `main.py` – główny plik uruchamiający aplikację.
+- `bcmp/` – implementacja modelu BCMP i MVA (SUM).
+- `gui/` – warstwa graficzna aplikacji (PyQt6).
 
-## Domyślna sieć kolejek (węzły i klasy)
+## Domyślna sieć kolejek (węzły i klasy) – interpretacja szpitalna
 
-W projekcie zaszyto pięć węzłów kolejki oraz cztery klasy zgłoszeń (sieć
-zamknięta):
+W projekcie zaszyto pięć węzłów kolejki oraz cztery klasy klientów.  
+Aby routing był bardziej intuicyjny, domyślna sieć została osadzona
+w narracji **szpitalnego centrum diagnostyczno-zabiegowego**.
 
-- **INTAKE** – Rejestracja zgłoszenia, FCFS, 2 serwery (obsługuje wszystkie
-  klasy).
-- **PRE_DIAG** – Szybka diagnostyka, PS, 3 serwery.
-- **OPS** – Obsługa operacyjna, FCFS, 4 serwery.
-- **LAB** – Analizy/IS, typ IS (nielimitowana liczba serwerów w modelu),
-  przyjmuje zgłoszenia po diagnostyce/obsłudze.
-- **ESC** – Eskalacja krytyczna, LCFS-PR, 1 serwer, pętluje krytyczne
-  zgłoszenia VIP/MAINT.
+### Węzły (oddziały)
 
-Klasy klientów: **VIP**, **STD**, **BATCH**, **MAINT** – każda z własną
-populacją (od 2 do 8 zgłoszeń) i macierzą routingu prowadzącą przez powyższe
-węzły. Routing i intensywności obsługi dla każdej klasy/węzła można edytować w
-zakładce *Network*.
+- **INTAKE** – *Izba Przyjęć / Triage*  
+  FCFS, 2 serwery  
+  Pierwszy punkt kontaktu pacjenta. Zależnie od potrzeb może kierować go na
+  diagnostykę (PRE_DIAG), badania (LAB) lub procedury (OPS).
+
+- **PRE_DIAG** – *Szybka diagnostyka*  
+  PS, 3 serwery  
+  Wstępne badanie i decyzja o dalszych krokach. W zależności od klasy pacjent
+  może trafić na zabieg (OPS), badania (LAB) albo wrócić do ponownego triage.
+
+- **OPS** – *Procedury i zabiegi doraźne / planowe*  
+  FCFS, 4 serwery  
+  Realizuje drobne zabiegi oraz działania operacyjne. W przypadku wykrycia
+  nagłych problemów pacjent może zostać przekazany do intensywnej terapii (ESC).
+
+- **LAB** – *Laboratorium / Diagnostyka obrazowa*  
+  IS, liczba serwerów nielimitowana  
+  Modeluje szybkie i równoległe badania. Wyniki mogą kierować pacjenta ponownie
+  na zabieg, na triage lub do dalszych badań.
+
+- **ESC** – *Eskalacja kliniczna / Intensywna terapia (ICU)*  
+  LCFS-PR, 1 serwer  
+  Trafiają tu pacjenci z nagłym pogorszeniem stanu. Po stabilizacji wracają na
+  triage (INTAKE), badania (LAB) lub zabieg (OPS) zależnie od klasy i routingu.
+
+### Klasy klientów (typy pacjentów)
+
+- **VIP** – pacjenci pilni, wysokiego ryzyka, często trafiają do ESC.  
+- **STD** – standardowe przypadki szpitalne.  
+- **BATCH** – pacjenci planowi (np. pakiet badań + zabieg).  
+- **MAINT** – pacjenci przewlekli, wymagający cyklicznych kontroli i możliwej
+  re-kwalifikacji w triage.
+
+### Routing – interpretacja w kontekście szpitala
+
+Routing jest w pełni zależny od klasy pacjenta. Przykładowe przepływy:
+
+- **INTAKE → PRE_DIAG / OPS / LAB**  
+  Rejestracja decyduje o pierwszym kroku: szybka diagnostyka, zabieg lub badania.
+  Pacjenci BATCH i MAINT częściej trafiają bezpośrednio na LAB.
+
+- **PRE_DIAG → OPS / LAB / INTAKE**  
+  Wyniki szybkiej oceny mogą kierować pacjenta na zabieg, na badania lub
+  wymuszać powrót do ponownego triage (np. z powodu niejednoznacznych objawów).
+
+- **LAB → OPS / INTAKE**  
+  Wyniki badań decydują o dalszych procedurach. Pacjenci mogą przechodzić przez
+  LAB wielokrotnie.
+
+- **OPS → ESC / INTAKE**  
+  W trakcie zabiegów możliwe jest pogorszenie stanu (VIP/MAINT → ESC), lub
+  powrót do triage po zakończonej procedurze.
+
+- **ESC → LAB / OPS / INTAKE**  
+  Pacjent po stabilizacji w intensywnej terapii wraca na dalszą diagnostykę lub
+  ponowne zabiegi, w zależności od ścieżki klasy.
+
+Tak zdefiniowany routing tworzy **zamkniętą pętlę szpitalną**, w której różne
+typy pacjentów krążą między rejestracją, diagnostyką, zabiegami i intensywną
+terapią, aż do osiągnięcia „punktu równowagi” modelowanego przez populację
+zamkniętą.
 
 ## Uruchomienie aplikacji
 
@@ -76,6 +118,7 @@ zakładce *Network*.
    ```bash
    python -m venv .venv
    source .venv/bin/activate
+
    ```
 
 2. **Zainstaluj zależności**

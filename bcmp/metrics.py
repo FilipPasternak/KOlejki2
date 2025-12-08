@@ -31,8 +31,8 @@ class NodeMetrics:
     """Metryki skumulowane dla pojedynczego węzła (po klasach)."""
 
     per_class: Dict[str, NodeClassMetrics] = field(default_factory=dict)
-    summary: "NodePerformanceSummary" | None = None
-    empirical_summary: "NodePerformanceSummary" | None = None
+    summary: "NodePerformanceSummary" or None = None
+    empirical_summary: "NodePerformanceSummary" or None = None
 
     @property
     def total_mean_customers(self) -> float:
