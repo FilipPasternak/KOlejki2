@@ -14,13 +14,6 @@ from bcmp.simulation import TicketSimulation
 
 class NetworkController:
     """Kontroler łączący GUI z modelem sieci BCMP.
-
-    Zadanie dla Codex:
-    -------------------
-    - Zaimplementować metody:
-        * do zmiany parametrów (np. populacji klas, czasów obsługi),
-        * do wywołania `mva_sum.compute_network_metrics(network)`,
-        * do powiadamiania widoków o zmianie danych (np. przez callbacki lub sygnały).
     """
 
     def __init__(self, network: BCMPNetwork, simulation: TicketSimulation | None = None) -> None:
@@ -39,11 +32,6 @@ class NetworkController:
 
     def recompute_metrics(self) -> None:
         """Przelicza metryki sieci i aktualizuje model.
-
-        Zadanie dla Codex:
-        -------------------
-        - Wywołać funkcję MVA z `bcmp.mva_sum`.
-        - Po przeliczeniu powiadomić widoki (np. przez mechanizm podpiętych callbacków).
         """
         mva_sum.compute_network_metrics(self.network)
         self._notify_listeners()
