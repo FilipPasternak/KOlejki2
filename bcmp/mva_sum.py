@@ -1,22 +1,13 @@
-"""Implementacja metody SUM / Mean Value Analysis (MVA) dla sieci BCMP.
+"""Implementacja metody SUM (Summation Method) dla sieci BCMP.
 
-Ten moduł ma zawierać algorytmy obliczające średnie wartości w sieci BCMP
-(zamkniętej, wieloklasowej).
-
-Docelowo:
-- Funkcja główna, np. `compute_network_metrics(network: BCMPNetwork) -> None`,
-  która:
-    * pobiera parametry sieci z `network.config` oraz z węzłów,
-    * wykonuje iteracyjny algorytm MVA (metoda SUM),
-    * zapisuje wyniki w `network.metrics` oraz w polach węzłów.
-
-- Ewentualne funkcje pomocnicze do obsługi poszczególnych typów węzłów BCMP:
-  (FCFS, PS, IS, LCFS_PR).
+Metoda SUM rozwiązuje zamknięte, wieloklasowe sieci BCMP iteracyjnie
+wyznaczając przepustowości klas oraz średnie liczby klientów w węzłach.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Sequence, Tuple
+import math
+from typing import Dict, List
 
 import numpy as np
 
@@ -29,13 +20,18 @@ from bcmp.metrics import (
 from bcmp.network import BCMPNetwork
 
 
-def compute_network_metrics(network: BCMPNetwork) -> None:
-    """Oblicza metryki sieci BCMP metodą SUM/MVA i zapisuje je w `network`.
+def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
+    """Oblicza metryki sieci BCMP metodą SUM.
 
-    Implementacja zakłada zamkniętą, wieloklasową sieć BCMP i wykorzystuje
-    klasyczny algorytm Mean Value Analysis. W obliczeniach używamy wizyt
-    (visit ratios) wyznaczonych z macierzy routingu dla każdej klasy, a
-    następnie iteracyjnie zwiększamy populację klientów do zadanej wartości.
+    Algorytm:
+    1. Wyznaczenie współczynników wizyt dla każdej klasy na podstawie macierzy
+       routingu.
+    2. Iteracyjne szacowanie przepustowości klas ``lambda_r`` tak, aby
+       spełniony był warunek normalizacyjny SUM: ``sum_i f_ir(lambda_r * e_ir)
+       = N_r`` dla każdej klasy ``r``.
+    3. Obliczenie liczby klientów ``K_i^r = f_ir(lambda_i^r)`` oraz czasów
+       przebywania ``T_i^r``.
+    4. Zapisanie wyników w ``network.metrics`` i aktualizacja węzłów.
     """
 
     node_ids = [node_config.id for node_config in network.config.nodes]
@@ -44,127 +40,164 @@ def compute_network_metrics(network: BCMPNetwork) -> None:
     visits = _compute_visit_ratios_per_class(network, node_ids, class_ids)
 
     populations = [network.classes[class_id].config.population for class_id in class_ids]
-    total_population = sum(populations)
 
-    state_metrics: Dict[Tuple[int, ...], np.ndarray] = {
-        tuple(0 for _ in class_ids): np.zeros((len(node_ids), len(class_ids)))
-    }
-    for total_clients in range(1, total_population + 1):
-        for state in _generate_states_for_total(total_clients, populations):
-            L_state = np.zeros((len(node_ids), len(class_ids)))
-            for class_idx, class_id in enumerate(class_ids):
-                if state[class_idx] == 0:
-                    continue
+    lambda_r = np.full(len(class_ids), 1e-5, dtype=float)
 
-                prev_state = list(state)
-                prev_state[class_idx] -= 1
-                prev_key = tuple(prev_state)
-                prev_L = state_metrics[prev_key]
+    max_iterations = 10_000
+    for _ in range(max_iterations):
+        lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
 
-                total_L_prev = prev_L.sum(axis=1)
-                R = np.array(
-                    [
-                        _mean_response_time(
-                            network.nodes[node_id], class_id, total_L_prev[node_idx]
-                        )
-                        for node_idx, node_id in enumerate(node_ids)
-                    ]
+        lambda_new = np.zeros_like(lambda_r)
+        for class_idx, class_id in enumerate(class_ids):
+            denom = 0.0
+            for node_idx, node_id in enumerate(node_ids):
+                arrival_ir = lambda_r[class_idx] * visits[class_id][node_idx]
+                denom += _load_function(
+                    network.nodes[node_id],
+                    class_id,
+                    arrival_ir,
+                    lambda_i_totals[node_idx],
                 )
 
-                denom = float(np.sum(visits[class_id] * R))
-                X_k = state[class_idx] / denom if denom > 0 else 0.0
+            lambda_new[class_idx] = (
+                populations[class_idx] / denom if denom > 0 else 0.0
+            )
 
-                for node_idx, node_id in enumerate(node_ids):
-                    L_state[node_idx, class_idx] = X_k * visits[class_id][node_idx] * R[node_idx]
+        error = float(np.sum((lambda_new - lambda_r) ** 2))
+        lambda_r = lambda_new
+        if error < eps:
+            break
+    else:
+        raise RuntimeError("Metoda SUM nie zbiega się w zadanej liczbie iteracji")
 
-            state_metrics[state] = L_state
-
-    final_state = tuple(populations)
-    final_L = state_metrics[final_state]
-
-    throughput_per_class: Dict[str, float] = {}
-
-    for class_idx, class_id in enumerate(class_ids):
-        population = populations[class_idx]
-        if population <= 0:
-            throughput_per_class[class_id] = 0.0
-            continue
-
-        prev_state = list(final_state)
-        prev_state[class_idx] -= 1
-        prev_L = state_metrics.get(tuple(prev_state), np.zeros_like(final_L))
-
-        R = np.array(
-            [
-                _mean_response_time(
-                    network.nodes[node_id], class_id, prev_L.sum(axis=1)[node_idx]
-                )
-                for node_idx, node_id in enumerate(node_ids)
-            ]
-        )
-
-        denom = float(np.sum(visits[class_id] * R))
-        throughput_per_class[class_id] = population / denom if denom > 0 else 0.0
+    lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
 
     network.metrics = NetworkMetrics()
     network.metrics.visit_ratios = visits
+    network.metrics.throughput_per_class = {
+        class_id: float(lambda_r[class_idx]) for class_idx, class_id in enumerate(class_ids)
+    }
 
     for node_idx, node_id in enumerate(node_ids):
         node_metrics = NodeMetrics()
+        node = network.nodes[node_id]
 
         for class_idx, class_id in enumerate(class_ids):
-            mean_customers = float(final_L[node_idx, class_idx])
-            prev_state = list(final_state)
-            prev_state[class_idx] -= 1 if prev_state[class_idx] > 0 else 0
-            prev_L = state_metrics.get(tuple(prev_state), np.zeros_like(final_L))
-            R = _mean_response_time(
-                network.nodes[node_id], class_id, prev_L.sum(axis=1)[node_idx]
+            arrival_ir = lambda_r[class_idx] * visits[class_id][node_idx]
+            mean_customers = _load_function(
+                node,
+                class_id,
+                arrival_ir,
+                lambda_i_totals[node_idx],
             )
-            service_rate = network.nodes[node_id].config.service_rates_per_class.get(class_id, 0.0)
+            response_time = mean_customers / arrival_ir if arrival_ir > 0 else 0.0
+
+            service_rate = node.config.service_rates_per_class.get(class_id, 0.0)
             service_time = 1.0 / service_rate if service_rate > 0 else 0.0
-            arrival_rate = throughput_per_class.get(class_id, 0.0) * visits[class_id][node_idx]
-            waiting_time = max(float(R) - service_time, 0.0)
-            queue_length = arrival_rate * waiting_time
-            servers = network.nodes[node_id].config.servers or 1
+            waiting_time = max(response_time - service_time, 0.0)
+            queue_length = arrival_ir * waiting_time
+
+            servers = node.config.servers or 1
             utilization = (
-                arrival_rate / (service_rate * servers)
+                arrival_ir / (service_rate * servers)
                 if service_rate > 0 and servers > 0
                 else 0.0
             )
+
             node_metrics.per_class[class_id] = NodeClassMetrics(
-                mean_customers=mean_customers,
-                mean_response_time=float(R),
+                mean_customers=float(mean_customers),
+                mean_response_time=response_time,
                 mean_waiting_time=waiting_time,
                 mean_queue_length=queue_length,
                 service_time=service_time,
-                arrival_rate=arrival_rate,
+                arrival_rate=arrival_ir,
                 utilization=utilization,
             )
 
         network.metrics.per_node[node_id] = node_metrics
         network.nodes[node_id].mean_customers_per_class = {
-            class_id: float(final_L[node_idx, class_idx]) for class_idx, class_id in enumerate(class_ids)
+            class_id: node_metrics.per_class[class_id].mean_customers
+            for class_id in class_ids
         }
-
-    network.metrics.throughput_per_class = throughput_per_class
 
     _update_node_summaries(network, node_ids)
 
 
-def _generate_states_for_total(total: int, limits: Sequence[int]) -> Iterable[Tuple[int, ...]]:
-    """Generuje wszystkie wektory populacji o zadanej sumie i ograniczeniach."""
+def _load_function(
+    node, class_id: str, lambda_ir: float, lambda_i_total: float
+) -> float:
+    """Zwraca wartość funkcji obciążenia f_i^r(λ_ir) zależną od typu węzła."""
 
-    def _helper(idx: int, remaining: int, current: List[int]) -> Iterable[Tuple[int, ...]]:
-        if idx == len(limits) - 1:
-            if remaining <= limits[idx]:
-                yield tuple(current + [remaining])
-            return
+    service_rate = node.config.service_rates_per_class.get(class_id)
+    if service_rate is None or service_rate <= 0:
+        raise ValueError(
+            f"Brak poprawnej intensywności obsługi dla klasy {class_id} w węźle {node.config.id}"
+        )
 
-        max_here = min(remaining, limits[idx])
-        for value in range(max_here + 1):
-            yield from _helper(idx + 1, remaining - value, current + [value])
+    node_type = node.config.node_type
+    servers = node.config.servers or 1
 
-    return list(_helper(0, total, []))
+    if node_type == "IS":
+        return lambda_ir / service_rate
+
+    if node_type == "FCFS":
+        mu_i = service_rate
+        traffic_intensity = lambda_i_total / mu_i
+        capacity_gap = servers * mu_i - lambda_i_total
+        if capacity_gap <= 0:
+            raise ValueError(
+                f"Węzeł {node.config.id} (FCFS) jest przeciążony: lambda_i={lambda_i_total}, mu_i={mu_i}, m={servers}"
+            )
+        return _erlang_c(traffic_intensity, servers) * lambda_ir / capacity_gap + lambda_ir / mu_i
+
+    if node_type in {"PS", "LCFS_PR"}:
+        mu_i = service_rate
+        capacity_gap = mu_i - lambda_i_total
+        if capacity_gap <= 0:
+            raise ValueError(
+                f"Węzeł {node.config.id} (PS) jest przeciążony: lambda_i={lambda_i_total}, mu_i={mu_i}"
+            )
+        return lambda_ir / capacity_gap
+
+    # Typ 3 (M/M/∞) traktujemy tak samo jak IS zgodnie z opisem
+    if node_type not in {"FCFS", "PS", "IS", "LCFS_PR"}:
+        raise ValueError(f"Nieobsługiwany typ węzła: {node_type}")
+
+    return lambda_ir / service_rate
+
+
+def _erlang_c(traffic_intensity: float, servers: int) -> float:
+    """Oblicza prawdopodobieństwo oczekiwania (Erlang C) dla systemu M/M/m.
+
+    ``traffic_intensity`` odpowiada wartości ρ_i = λ_i / μ_i.
+    """
+
+    if servers <= 0:
+        raise ValueError("Liczba serwerów musi być dodatnia")
+
+    rho_per_server = traffic_intensity / servers
+    if rho_per_server >= 1:
+        return 1.0
+
+    sum_terms = sum((traffic_intensity**k) / math.factorial(k) for k in range(servers))
+    last_term = (traffic_intensity**servers) / (
+        math.factorial(servers) * (1 - rho_per_server)
+    )
+    return last_term / (sum_terms + last_term)
+
+
+def _total_arrivals_per_node(
+    lambda_r: np.ndarray, visits: Dict[str, np.ndarray], node_ids: List[str], class_ids: List[str]
+) -> List[float]:
+    """Zwraca całkowitą intensywność przybyć do każdego węzła (suma po klasach)."""
+
+    totals = [0.0 for _ in node_ids]
+    for class_idx, class_id in enumerate(class_ids):
+        totals = [
+            totals[node_idx] + lambda_r[class_idx] * visits[class_id][node_idx]
+            for node_idx in range(len(node_ids))
+        ]
+    return totals
 
 
 def _compute_visit_ratios_per_class(
@@ -198,30 +231,10 @@ def _solve_visit_ratios(transition_matrix: np.ndarray) -> np.ndarray:
     return solution
 
 
-def _mean_response_time(node, class_id: str, mean_customers_total: float) -> float:
-    """Zwraca średni czas przebywania w węźle dla danej klasy."""
-
-    service_rate = node.config.service_rates_per_class.get(class_id)
-    if service_rate is None or service_rate <= 0:
-        raise ValueError(f"Brak poprawnej intensywności obsługi dla klasy {class_id} w węźle {node.config.id}")
-
-    service_time = 1.0 / service_rate
-
-    if node.config.node_type == "IS":
-        return service_time
-
-    servers = node.config.servers or 1
-    if node.config.node_type in {"FCFS", "PS", "LCFS_PR"}:
-        return service_time * (1.0 + mean_customers_total / servers)
-
-    raise ValueError(f"Nieobsługiwany typ węzła: {node.config.node_type}")
-
-
 def _update_node_summaries(network: BCMPNetwork, node_ids: List[str]) -> None:
     """Agreguje metryki per-klasa do wskaźników kolejki dla węzłów."""
 
     for node_id in node_ids:
-        node = network.nodes[node_id]
         metrics = network.metrics.per_node[node_id]
 
         total_arrival = 0.0
