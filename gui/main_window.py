@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
 
         tabs.addTab(self.simulation_view, "Symulacja")
         tabs.addTab(self.network_view, "Network")
-        tabs.addTab(self.results_view, "Results")
+        tabs.addTab(self.results_view, "Wyniki (SUM)")
 
         self.setCentralWidget(tabs)
 

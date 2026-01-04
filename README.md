@@ -20,6 +20,18 @@ projekcie przyjmujemy:
 - **Routing zależny od klasy** – każda klasa ma własną macierz prawdopodobieństw
   przejść między węzłami.
 
+### Metoda SUM – co robi i po co jej używamy
+
+Metoda SUM (Summation Method) to iteracyjny algorytm analityczny do rozwiązywania
+zamkniętych, wieloklasowych sieci BCMP. Pozwala szybko wyznaczyć przepustowości
+klas oraz średnie liczby klientów i czasy przebywania w węzłach bez konieczności
+pełnej symulacji zdarzeniowej. W projekcie służy ona do:
+
+- obliczenia bazowych metryk (L, Lq, W, Wq, ρ) prezentowanych w zakładce **Wyniki (SUM)**,
+- zestawiania wyników analitycznych z wynikami symulacji w tej samej zakładce,
+- szybkiej oceny wpływu zmian parametrów sieci na obciążenie przed uruchomieniem
+  czasochłonnej symulacji.
+
 ## Struktura katalogów
 
 - `main.py` – główny plik uruchamiający aplikację.
@@ -128,7 +140,7 @@ Po starcie otwiera się okno PyQt6 z trzema zakładkami:
 - **Network** – konfiguracja sieci (węzły, klasy, routing) z możliwością
   edycji podstawowych parametrów oraz dostrajania stawek obsługi do docelowego
   wykorzystania serwerów (ρ) per węzeł.
-- **Results** – wyniki analizy metodą SUM/MVA (średnie liczby klientów,
+- **Wyniki (SUM)** – wyniki analizy metodą SUM/MVA (średnie liczby klientów,
   czasy odpowiedzi i throughput) rozszerzone o metryki kolejki (Wq, W, Lq, L,
   ρ) liczone analitycznie i empirycznie (z symulacji) dla porównania.
 
