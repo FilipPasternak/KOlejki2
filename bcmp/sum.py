@@ -41,9 +41,22 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
 
     populations = [network.classes[class_id].config.population for class_id in class_ids]
 
+    capacity_limits = []
+    for node_config in network.config.nodes:
+        if node_config.node_type == "IS":
+            capacity_limits.append(math.inf)
+            continue
+        if not node_config.service_rates_per_class:
+            capacity_limits.append(math.inf)
+            continue
+        min_rate = min(rate for rate in node_config.service_rates_per_class.values() if rate > 0)
+        servers = node_config.servers or 1
+        capacity_limits.append(servers * min_rate)
+
     lambda_r = np.full(len(class_ids), 1e-5, dtype=float)
 
     max_iterations = 10_000
+    relaxation = 0.3
     for _ in range(max_iterations):
         lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
 
@@ -63,8 +76,19 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
                 populations[class_idx] / denom if denom > 0 else 0.0
             )
 
+        lambda_i_totals_new = _total_arrivals_per_node(
+            lambda_new, visits, node_ids, class_ids
+        )
+        scale = 1.0
+        for node_idx, total in enumerate(lambda_i_totals_new):
+            capacity = capacity_limits[node_idx]
+            if math.isfinite(capacity) and total > capacity and capacity > 0:
+                scale = min(scale, (capacity / total) * 0.9)
+        if scale < 1.0:
+            lambda_new *= scale
+
         error = float(np.sum((lambda_new - lambda_r) ** 2))
-        lambda_r = lambda_new
+        lambda_r = (1 - relaxation) * lambda_r + relaxation * lambda_new
         if error < eps:
             break
     else:
@@ -145,18 +169,16 @@ def _load_function(
         traffic_intensity = lambda_i_total / mu_i
         capacity_gap = servers * mu_i - lambda_i_total
         if capacity_gap <= 0:
-            raise ValueError(
-                f"Węzeł {node.config.id} (FCFS) jest przeciążony: lambda_i={lambda_i_total}, mu_i={mu_i}, m={servers}"
-            )
+            capacity_gap = 1e-9
         return _erlang_c(traffic_intensity, servers) * lambda_ir / capacity_gap + lambda_ir / mu_i
 
     if node_type in {"PS", "LCFS_PR"}:
         mu_i = service_rate
-        capacity_gap = mu_i - lambda_i_total
+        servers = max(servers, 1)
+        effective_capacity = mu_i * servers
+        capacity_gap = effective_capacity - lambda_i_total
         if capacity_gap <= 0:
-            raise ValueError(
-                f"Węzeł {node.config.id} (PS) jest przeciążony: lambda_i={lambda_i_total}, mu_i={mu_i}"
-            )
+            capacity_gap = 1e-9
         return lambda_ir / capacity_gap
 
     # Typ 3 (M/M/∞) traktujemy tak samo jak IS zgodnie z opisem
