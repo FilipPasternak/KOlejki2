@@ -2,7 +2,7 @@
 
 from bcmp.config_schema import ClassConfig, NetworkConfig, RoutingEntry, ServiceCenterConfig
 from bcmp.network import BCMPNetwork
-from bcmp import mva_sum
+from bcmp import sum
 from bcmp.simulation import TicketSimulation
 from gui.app import run_gui
 
@@ -152,7 +152,7 @@ def build_network(config: NetworkConfig) -> BCMPNetwork:
 
 def precompute_initial_metrics(network: BCMPNetwork) -> None:
     """Przeprowadza podstawowe obliczenia sieci przed startem GUI."""
-    mva_sum.compute_network_metrics(network)
+    sum.compute_network_metrics(network)
 
 
 def main() -> None:

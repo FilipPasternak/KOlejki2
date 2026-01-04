@@ -1,8 +1,7 @@
-# Projekt: Sieć kolejkowa BCMP z metodą SUM (MVA)
+# Projekt: Sieć kolejkowa BCMP z metodą SUM
 
 Ten projekt prezentuje kompletny, uruchamialny prototyp aplikacji do analizy
-zamkniętych, wieloklasowych sieci kolejkowych typu BCMP z użyciem algorytmu Mean
-Value Analysis (metoda SUM) **oraz** wbudowaną symulację przepływu zgłoszeń w
+zamkniętych, wieloklasowych sieci kolejkowych typu BCMP z użyciem algorytmu SUM **oraz** wbudowaną symulację przepływu zgłoszeń w
 czasie rzeczywistym. Warstwa logiczna jest napisana w Pythonie, a GUI oparto o
 PyQt6.
 
@@ -21,24 +20,10 @@ projekcie przyjmujemy:
 - **Routing zależny od klasy** – każda klasa ma własną macierz prawdopodobieństw
   przejść między węzłami.
 
-### Metoda SUM / Mean Value Analysis (MVA)
-
-Algorytm MVA iteracyjnie zwiększa populację klientów od zera do pełnej liczby,
-obliczając dla każdego stanu średnie czasy przebywania, średnią liczbę klientów
-w węzłach oraz throughput. Kluczowe elementy:
-
-1. **Współczynniki wizyt (visit ratios)** – wyliczone z macierzy routingu dla każdej klasy.
-2. **Iteracje po stanach** – od pustej sieci aż do pełnej populacji.
-3. **Czasy przebywania** – dla FCFS/PS/LCFS-PR stosujemy
-   \(R_i = S_i (1 + L_i / m)\); dla IS \(R_i = S_i\).
-4. **Throughput** – \(X^{(k)} = N^{(k)} / \sum_i V_i^{(k)} R_i^{(k)}\).
-
-Wyniki są przechowywane w `network.metrics` oraz wyświetlane w GUI.
-
 ## Struktura katalogów
 
 - `main.py` – główny plik uruchamiający aplikację.
-- `bcmp/` – implementacja modelu BCMP i MVA (SUM).
+- `bcmp/` – implementacja modelu BCMP i SUM.
 - `gui/` – warstwa graficzna aplikacji (PyQt6).
 
 ## Domyślna sieć kolejek (węzły i klasy) – interpretacja szpitalna

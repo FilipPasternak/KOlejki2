@@ -8,7 +8,7 @@ Tutaj można umieścić funkcje/kontrolery, które:
 """
 
 from bcmp.network import BCMPNetwork
-from bcmp import mva_sum
+from bcmp import sum
 from bcmp.simulation import TicketSimulation
 
 

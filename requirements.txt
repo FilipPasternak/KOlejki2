@@ -1,7 +1,4 @@
-# Framework GUI do implementacji (np. PyQt6 lub tkinter).
-# Poniżej propozycja z PyQt6.
+
 PyQt6
 PyQt6-Charts
-
-# Do obliczeń numerycznych w metodzie SUM / MVA
 numpy
