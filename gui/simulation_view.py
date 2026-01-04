@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt6.QtWidgets import (
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QLabel,
@@ -28,9 +31,10 @@ class SimulationView(QWidget):
         self.network = network
         self.simulation = simulation
         self.series_by_node: dict[str, QLineSeries] = {}
+        self._last_tick_time = time.monotonic()
 
         self._timer = QTimer(self)
-        self._timer.setInterval(500)
+        self._timer.setInterval(100)
         self._timer.timeout.connect(self._on_tick)
         self._timer.start()
 
@@ -41,13 +45,29 @@ class SimulationView(QWidget):
         controls_layout = QGridLayout()
         controls.setLayout(controls_layout)
 
-        self.start_button = QPushButton("Start/Pauza")
-        self.start_button.clicked.connect(self.simulation.toggle)
+        self.start_button = QPushButton("Start")
+        self.start_button.clicked.connect(self._on_start)
         controls_layout.addWidget(self.start_button, 0, 0)
+
+        self.pause_button = QPushButton("Pauza")
+        self.pause_button.clicked.connect(self._on_pause)
+        controls_layout.addWidget(self.pause_button, 0, 1)
 
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self._on_reset)
-        controls_layout.addWidget(self.reset_button, 0, 1)
+        controls_layout.addWidget(self.reset_button, 0, 2)
+
+        controls_layout.addWidget(QLabel("Tempo czasu"), 1, 0)
+        self.speed_input = QDoubleSpinBox()
+        self.speed_input.setRange(0.1, 20.0)
+        self.speed_input.setSingleStep(0.1)
+        self.speed_input.setValue(1.0)
+        self.speed_input.setSuffix("x")
+        controls_layout.addWidget(self.speed_input, 1, 1)
+        controls_layout.setColumnStretch(3, 1)
+
+        self.status_label = QLabel()
+        controls_layout.addWidget(self.status_label, 1, 2)
 
         layout.addWidget(controls)
 
@@ -77,11 +97,24 @@ class SimulationView(QWidget):
         self.refresh()
 
     def _on_tick(self) -> None:
-        self.simulation.step(0.5)
+        now = time.monotonic()
+        elapsed = max(0.0, now - self._last_tick_time)
+        self._last_tick_time = now
+        self.simulation.step(elapsed * self.speed_input.value())
+        self.refresh()
+
+    def _on_start(self) -> None:
+        self._last_tick_time = time.monotonic()
+        self.simulation.start()
+        self.refresh()
+
+    def _on_pause(self) -> None:
+        self.simulation.stop()
         self.refresh()
 
     def _on_reset(self) -> None:
         self.simulation.reset()
+        self._last_tick_time = time.monotonic()
         self.refresh()
 
     def refresh(self) -> None:
@@ -100,6 +133,7 @@ class SimulationView(QWidget):
 
         self.log_box.setPlainText("\n".join(snapshot.events))
         self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+        self._update_controls()
 
     def _refresh_chart(self, node_ids: list[str], history: dict[str, list[tuple[float, int]]]) -> None:
         max_time = 0.0
@@ -123,3 +157,11 @@ class SimulationView(QWidget):
 
         self.axis_x.setRange(max(0.0, max_time - 60.0), max(60.0, max_time))
         self.axis_y.setRange(0.0, max(1.0, max_queue + 1))
+
+    def _update_controls(self) -> None:
+        status = "Uruchomiona" if self.simulation.running else "Wstrzymana"
+        label = "Start" if self.simulation.current_time == 0.0 else "Wznów"
+        self.start_button.setText(label)
+        self.start_button.setEnabled(not self.simulation.running)
+        self.pause_button.setEnabled(self.simulation.running)
+        self.status_label.setText(f"Status: {status} | Tempo: {self.speed_input.value():.1f}x")
