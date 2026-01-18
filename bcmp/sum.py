@@ -41,24 +41,15 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
 
     populations = [network.classes[class_id].config.population for class_id in class_ids]
 
-    capacity_limits = []
-    for node_config in network.config.nodes:
-        if node_config.node_type == "IS":
-            capacity_limits.append(math.inf)
-            continue
-        if not node_config.service_rates_per_class:
-            capacity_limits.append(math.inf)
-            continue
-        min_rate = min(rate for rate in node_config.service_rates_per_class.values() if rate > 0)
-        servers = node_config.servers or 1
-        capacity_limits.append(servers * min_rate)
-
     lambda_r = np.full(len(class_ids), 1e-5, dtype=float)
 
     max_iterations = 10_000
     relaxation = 0.3
     for _ in range(max_iterations):
         lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
+        mean_service_times = _mean_service_time_per_node(
+            network, node_ids, class_ids, lambda_r, visits
+        )
 
         lambda_new = np.zeros_like(lambda_r)
         for class_idx, class_id in enumerate(class_ids):
@@ -70,6 +61,7 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
                     class_id,
                     arrival_ir,
                     lambda_i_totals[node_idx],
+                    mean_service_times[node_idx],
                 )
 
             lambda_new[class_idx] = (
@@ -79,10 +71,20 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
         lambda_i_totals_new = _total_arrivals_per_node(
             lambda_new, visits, node_ids, class_ids
         )
+        mean_service_times_new = _mean_service_time_per_node(
+            network, node_ids, class_ids, lambda_new, visits
+        )
         scale = 1.0
         for node_idx, total in enumerate(lambda_i_totals_new):
-            capacity = capacity_limits[node_idx]
-            if math.isfinite(capacity) and total > capacity and capacity > 0:
+            node = network.nodes[node_ids[node_idx]]
+            if node.config.node_type == "IS":
+                continue
+            mean_service_time = mean_service_times_new[node_idx]
+            if mean_service_time <= 0:
+                continue
+            servers = node.config.servers or 1
+            capacity = servers / mean_service_time
+            if total > capacity and capacity > 0:
                 scale = min(scale, (capacity / total) * 0.9)
         if scale < 1.0:
             lambda_new *= scale
@@ -95,6 +97,9 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
         raise RuntimeError("Metoda SUM nie zbiega się w zadanej liczbie iteracji")
 
     lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
+    mean_service_times = _mean_service_time_per_node(
+        network, node_ids, class_ids, lambda_r, visits
+    )
 
     network.metrics = NetworkMetrics()
     network.metrics.visit_ratios = visits
@@ -113,6 +118,7 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
                 class_id,
                 arrival_ir,
                 lambda_i_totals[node_idx],
+                mean_service_times[node_idx],
             )
             response_time = mean_customers / arrival_ir if arrival_ir > 0 else 0.0
 
@@ -148,7 +154,11 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
 
 
 def _load_function(
-    node, class_id: str, lambda_ir: float, lambda_i_total: float
+    node,
+    class_id: str,
+    lambda_ir: float,
+    lambda_i_total: float,
+    mean_service_time: float,
 ) -> float:
     """Zwraca wartość funkcji obciążenia f_i^r(λ_ir) zależną od typu węzła."""
 
@@ -161,31 +171,74 @@ def _load_function(
     node_type = node.config.node_type
     servers = node.config.servers or 1
 
+    service_time = 1.0 / service_rate
     if node_type == "IS":
-        return lambda_ir / service_rate
+        return lambda_ir * service_time
 
     if node_type == "FCFS":
-        mu_i = service_rate
-        traffic_intensity = lambda_i_total / mu_i
-        capacity_gap = servers * mu_i - lambda_i_total
+        mean_service_time = mean_service_time or service_time
+        mu_eff = 1.0 / mean_service_time if mean_service_time > 0 else service_rate
+        traffic_intensity = lambda_i_total / mu_eff if mu_eff > 0 else 0.0
+        capacity_gap = servers * mu_eff - lambda_i_total
         if capacity_gap <= 0:
             capacity_gap = 1e-9
-        return _erlang_c(traffic_intensity, servers) * lambda_ir / capacity_gap + lambda_ir / mu_i
+        waiting_time = _erlang_c(traffic_intensity, servers) / capacity_gap
+        return lambda_ir * (service_time + waiting_time)
 
     if node_type in {"PS", "LCFS_PR"}:
-        mu_i = service_rate
+        mean_service_time = mean_service_time or service_time
         servers = max(servers, 1)
-        effective_capacity = mu_i * servers
-        capacity_gap = effective_capacity - lambda_i_total
-        if capacity_gap <= 0:
-            capacity_gap = 1e-9
-        return lambda_ir / capacity_gap
+        utilization = (lambda_i_total * mean_service_time) / servers
+        if utilization >= 1:
+            utilization = 1 - 1e-9
+        return lambda_ir * service_time / (1 - utilization)
 
     # Typ 3 (M/M/∞) traktujemy tak samo jak IS zgodnie z opisem
     if node_type not in {"FCFS", "PS", "IS", "LCFS_PR"}:
         raise ValueError(f"Nieobsługiwany typ węzła: {node_type}")
 
     return lambda_ir / service_rate
+
+
+def _mean_service_time_per_node(
+    network: BCMPNetwork,
+    node_ids: List[str],
+    class_ids: List[str],
+    lambda_r: np.ndarray,
+    visits: Dict[str, np.ndarray],
+) -> List[float]:
+    """Wyznacza średni czas obsługi na węzłach w oparciu o miks napływów klas."""
+
+    mean_times: List[float] = []
+    for node_idx, node_id in enumerate(node_ids):
+        node = network.nodes[node_id]
+        total_arrival = 0.0
+        weighted_time = 0.0
+        for class_idx, class_id in enumerate(class_ids):
+            arrival_ir = lambda_r[class_idx] * visits[class_id][node_idx]
+            total_arrival += arrival_ir
+            service_rate = node.config.service_rates_per_class.get(class_id)
+            if service_rate is None or service_rate <= 0:
+                raise ValueError(
+                    f"Brak poprawnej intensywności obsługi dla klasy {class_id} w węźle {node_id}"
+                )
+            weighted_time += arrival_ir * (1.0 / service_rate)
+
+        if total_arrival > 0:
+            mean_times.append(weighted_time / total_arrival)
+            continue
+
+        service_times = [
+            1.0 / rate
+            for rate in node.config.service_rates_per_class.values()
+            if rate > 0
+        ]
+        if service_times:
+            mean_times.append(float(np.mean(service_times)))
+        else:
+            mean_times.append(0.0)
+
+    return mean_times
 
 
 def _erlang_c(traffic_intensity: float, servers: int) -> float:
