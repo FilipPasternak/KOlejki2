@@ -17,13 +17,13 @@ class ResultsView(QWidget):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        layout.addWidget(QLabel("Throughput per class"))
+        layout.addWidget(QLabel("Throughput per class (wyniki SUM)"))
         self.throughput_table = QTableWidget()
         self.throughput_table.setColumnCount(2)
-        self.throughput_table.setHorizontalHeaderLabels(["Class", "Throughput"])
+        self.throughput_table.setHorizontalHeaderLabels(["Class", "Throughput (SUM)"])
         layout.addWidget(self.throughput_table)
 
-        layout.addWidget(QLabel("Node metrics (średnie wartości per klasa)"))
+        layout.addWidget(QLabel("Metryki węzłów (SUM – średnie wartości per klasa)"))
         self.node_table = QTableWidget()
         self.node_table.setColumnCount(7)
         self.node_table.setHorizontalHeaderLabels(
@@ -39,10 +39,12 @@ class ResultsView(QWidget):
         )
         layout.addWidget(self.node_table)
 
-        layout.addWidget(QLabel("Metryki kolejki – analiza vs symulacja"))
+        layout.addWidget(QLabel("Metryki kolejki – analiza SUM vs symulacja"))
         self.queue_table = QTableWidget()
         self.queue_table.setColumnCount(7)
-        self.queue_table.setHorizontalHeaderLabels(["Źródło", "Węzeł", "Lq", "L", "Wq", "W", "ρ"])
+        self.queue_table.setHorizontalHeaderLabels(
+            ["Źródło (SUM/symulacja)", "Węzeł", "Lq", "L", "Wq", "W", "ρ"]
+        )
         layout.addWidget(self.queue_table)
 
         self.refresh()
