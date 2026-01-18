@@ -33,14 +33,14 @@ class NetworkController:
     def recompute_metrics(self) -> None:
         """Przelicza metryki sieci i aktualizuje model.
         """
-        mva_sum.compute_network_metrics(self.network)
+        sum.compute_network_metrics(self.network)
         self._notify_listeners()
 
     def tune_service_rates_for_rho(self, targets: dict[str, float]) -> None:
         """Skaluje stawki obsługi, aby zbliżyć się do docelowych wartości ρ."""
 
         if not self.network.metrics.visit_ratios:
-            mva_sum.compute_network_metrics(self.network)
+            sum.compute_network_metrics(self.network)
 
         node_index = {node.id: idx for idx, node in enumerate(self.network.config.nodes)}
         visits = self.network.metrics.visit_ratios
@@ -77,7 +77,7 @@ class NetworkController:
                     for class_id, mu in node.config.service_rates_per_class.items():
                         config_node.service_rates_per_class[class_id] = mu
 
-        mva_sum.compute_network_metrics(self.network)
+        sum.compute_network_metrics(self.network)
         self._notify_listeners()
 
     # --- Symulacja -----------------------------------------------------------
