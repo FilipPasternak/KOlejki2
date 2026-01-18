@@ -59,6 +59,9 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
     relaxation = 0.3
     for _ in range(max_iterations):
         lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
+        offered_loads = _total_offered_load_per_node(
+            network, lambda_r, visits, node_ids, class_ids
+        )
 
         lambda_new = np.zeros_like(lambda_r)
         for class_idx, class_id in enumerate(class_ids):
@@ -70,6 +73,7 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
                     class_id,
                     arrival_ir,
                     lambda_i_totals[node_idx],
+                    offered_loads[node_idx],
                 )
 
             lambda_new[class_idx] = (
@@ -95,6 +99,9 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
         raise RuntimeError("Metoda SUM nie zbiega się w zadanej liczbie iteracji")
 
     lambda_i_totals = _total_arrivals_per_node(lambda_r, visits, node_ids, class_ids)
+    offered_loads = _total_offered_load_per_node(
+        network, lambda_r, visits, node_ids, class_ids
+    )
 
     network.metrics = NetworkMetrics()
     network.metrics.visit_ratios = visits
@@ -113,6 +120,7 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
                 class_id,
                 arrival_ir,
                 lambda_i_totals[node_idx],
+                offered_loads[node_idx],
             )
             response_time = mean_customers / arrival_ir if arrival_ir > 0 else 0.0
 
@@ -148,7 +156,7 @@ def compute_network_metrics(network: BCMPNetwork, *, eps: float = 1e-5) -> None:
 
 
 def _load_function(
-    node, class_id: str, lambda_ir: float, lambda_i_total: float
+    node, class_id: str, lambda_ir: float, lambda_i_total: float, offered_load: float
 ) -> float:
     """Zwraca wartość funkcji obciążenia f_i^r(λ_ir) zależną od typu węzła."""
 
@@ -166,8 +174,11 @@ def _load_function(
 
     if node_type == "FCFS":
         mu_i = service_rate
-        traffic_intensity = lambda_i_total / mu_i
-        capacity_gap = servers * mu_i - lambda_i_total
+        if offered_load <= 0 or lambda_i_total <= 0:
+            return 0.0
+        effective_mu = lambda_i_total / offered_load
+        traffic_intensity = offered_load
+        capacity_gap = servers * effective_mu - lambda_i_total
         if capacity_gap <= 0:
             capacity_gap = 1e-9
         return _erlang_c(traffic_intensity, servers) * lambda_ir / capacity_gap + lambda_ir / mu_i
@@ -175,11 +186,12 @@ def _load_function(
     if node_type in {"PS", "LCFS_PR"}:
         mu_i = service_rate
         servers = max(servers, 1)
-        effective_capacity = mu_i * servers
-        capacity_gap = effective_capacity - lambda_i_total
+        if offered_load <= 0:
+            return 0.0
+        capacity_gap = servers - offered_load
         if capacity_gap <= 0:
             capacity_gap = 1e-9
-        return lambda_ir / capacity_gap
+        return (lambda_ir / mu_i) * (servers / capacity_gap)
 
     # Typ 3 (M/M/∞) traktujemy tak samo jak IS zgodnie z opisem
     if node_type not in {"FCFS", "PS", "IS", "LCFS_PR"}:
@@ -219,6 +231,31 @@ def _total_arrivals_per_node(
             totals[node_idx] + lambda_r[class_idx] * visits[class_id][node_idx]
             for node_idx in range(len(node_ids))
         ]
+    return totals
+
+
+def _total_offered_load_per_node(
+    network: BCMPNetwork,
+    lambda_r: np.ndarray,
+    visits: Dict[str, np.ndarray],
+    node_ids: List[str],
+    class_ids: List[str],
+) -> List[float]:
+    """Zwraca sumę obciążeń oferowanych (sum_r lambda_ir / mu_ir) dla węzłów."""
+
+    totals = [0.0 for _ in node_ids]
+    for node_idx, node_id in enumerate(node_ids):
+        node = network.nodes[node_id]
+        for class_idx, class_id in enumerate(class_ids):
+            arrival_ir = lambda_r[class_idx] * visits[class_id][node_idx]
+            if arrival_ir <= 0:
+                continue
+            service_rate = node.config.service_rates_per_class.get(class_id, 0.0)
+            if service_rate <= 0:
+                raise ValueError(
+                    f"Brak poprawnej intensywności obsługi dla klasy {class_id} w węźle {node_id}"
+                )
+            totals[node_idx] += arrival_ir / service_rate
     return totals
 
 
